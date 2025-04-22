@@ -11,6 +11,8 @@ import multiprocessing as mp
 
 import pprint
 import yaml
+import os
+import logging
 
 from src.utils.distributed import init_distributed
 from src.train import main as app_main
@@ -52,14 +54,41 @@ def process_main(rank, fname, world_size, devices):
     app_main(args=params)
 
 
+def single_process_main(fname, device):
+    os.environ['CUDA_VISIBLE_DEVICES'] = str(device.split(':')[-1])
+
+    logging.basicConfig()
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+
+    logger.info(f'called-params {fname}')
+
+    # -- load script params
+    params = None
+    with open(fname, 'r') as y_file:
+        params = yaml.load(y_file, Loader=yaml.FullLoader)
+        logger.info('loaded params...')
+        pp = pprint.PrettyPrinter(indent=4)
+        pp.pprint(params)
+
+    # Skip distributed initialization for single GPU
+    logger.info(f'Running in single-process mode on device {device}')
+    app_main(args=params)
+
+
 if __name__ == '__main__':
     args = parser.parse_args()
 
     num_gpus = len(args.devices)
-    mp.set_start_method('spawn')
-
-    for rank in range(num_gpus):
-        mp.Process(
-            target=process_main,
-            args=(rank, args.fname, num_gpus, args.devices)
-        ).start()
+    
+    # If only one GPU is specified, run in single process mode
+    if num_gpus == 1:
+        single_process_main(args.fname, args.devices[0])
+    else:
+        # For multiple GPUs, use multiprocessing
+        mp.set_start_method('spawn')
+        for rank in range(num_gpus):
+            mp.Process(
+                target=process_main,
+                args=(rank, args.fname, num_gpus, args.devices)
+            ).start()

@@ -6,6 +6,7 @@
 #
 
 import os
+import math
 
 # -- FOR DISTRIBUTED TRAINING ENSURE ONLY 1 DEVICE VISIBLE PER PROCESS
 try:
@@ -35,13 +36,13 @@ from src.utils.distributed import (
     init_distributed,
     AllReduce
 )
-from src.utils.logging import (
+from src.utils.custom_logging import (
     CSVLogger,
     gpu_timer,
     grad_logger,
     AverageMeter)
 from src.utils.tensors import repeat_interleave_batch
-from src.datasets.imagenet1k import make_imagenet1k
+from src.datasets.microscopy import make_microscopy_dataset
 
 from src.helper import (
     load_checkpoint,
@@ -136,10 +137,16 @@ def main(args, resume_preempt=False):
         pass
 
     # -- init torch distributed backend
-    world_size, rank = init_distributed()
-    logger.info(f'Initialized (rank/world-size) {rank}/{world_size}')
-    if rank > 0:
-        logger.setLevel(logging.ERROR)
+    use_distributed = True
+    try:
+        world_size, rank = init_distributed()
+        logger.info(f'Initialized (rank/world-size) {rank}/{world_size}')
+        if rank > 0:
+            logger.setLevel(logging.ERROR)
+    except Exception as e:
+        logger.info(f'Distributed training not available: {str(e)}')
+        use_distributed = False
+        world_size, rank = 1, 0
 
     # -- log/checkpointing paths
     log_file = os.path.join(folder, f'{tag}_r{rank}.csv')
@@ -183,13 +190,10 @@ def main(args, resume_preempt=False):
     transform = make_transforms(
         crop_size=crop_size,
         crop_scale=crop_scale,
-        gaussian_blur=use_gaussian_blur,
-        horizontal_flip=use_horizontal_flip,
-        color_distortion=use_color_distortion,
-        color_jitter=color_jitter)
+        horizontal_flip=use_horizontal_flip)
 
     # -- init data-loaders/samplers
-    _, unsupervised_loader, unsupervised_sampler = make_imagenet1k(
+    _, unsupervised_loader, unsupervised_sampler = make_microscopy_dataset(
             transform=transform,
             batch_size=batch_size,
             collator=mask_collator,
@@ -198,10 +202,7 @@ def main(args, resume_preempt=False):
             num_workers=num_workers,
             world_size=world_size,
             rank=rank,
-            root_path=root_path,
-            image_folder=image_folder,
-            copy_data=copy_data,
-            drop_last=True)
+            root_path=root_path)
     ipe = len(unsupervised_loader)
 
     # -- init optimizer and scheduler
@@ -218,9 +219,13 @@ def main(args, resume_preempt=False):
         num_epochs=num_epochs,
         ipe_scale=ipe_scale,
         use_bfloat16=use_bfloat16)
-    encoder = DistributedDataParallel(encoder, static_graph=True)
-    predictor = DistributedDataParallel(predictor, static_graph=True)
-    target_encoder = DistributedDataParallel(target_encoder)
+    
+    # Wrap with DDP if distributed training is available
+    if use_distributed:
+        encoder = DistributedDataParallel(encoder, static_graph=True)
+        predictor = DistributedDataParallel(predictor, static_graph=True)
+        target_encoder = DistributedDataParallel(target_encoder)
+    
     for p in target_encoder.parameters():
         p.requires_grad = False
 
@@ -309,7 +314,8 @@ def main(args, resume_preempt=False):
 
                 def loss_fn(z, h):
                     loss = F.smooth_l1_loss(z, h)
-                    loss = AllReduce.apply(loss)
+                    if use_distributed:
+                        loss = AllReduce.apply(loss)
                     return loss
 
                 # Step 1. Forward
