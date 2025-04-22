@@ -193,6 +193,17 @@ The integration automatically logs:
 - Memory usage
 - Model checkpoints
 - Full configuration parameters
+- UMAP visualizations of embeddings at the end of each epoch (colored by class labels)
+
+### UMAP Visualization
+
+The code automatically generates UMAP visualizations of the embeddings at the end of each epoch. For datasets like the microscopy dataset, these visualizations are colored according to the class labels, which are derived from the folder names of the images.
+
+To use this feature:
+1. Ensure Weights & Biases logging is enabled (`use_wandb: true` in your config)
+2. Make sure the required dependencies are installed: `pip install umap-learn matplotlib scikit-learn`
+
+The visualizations help to track how the embedding space evolves during training and can be viewed in your W&B dashboard.
 
 ### Distributed Training
 

@@ -4,4 +4,8 @@ pyyaml
 numpy
 opencv-python
 submitit
-wandb 
+wandb
+umap-learn
+matplotlib
+scikit-learn
+tifffile 

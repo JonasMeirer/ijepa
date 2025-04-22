@@ -35,6 +35,7 @@ meta:
   wandb_project: "ijepa"  # Project name
   wandb_entity: "username"  # Username or team name (optional)
   wandb_run_name: "experiment-name"  # Run name (optional)
+  umap_epochs: 3
   copy_data: false
   load_checkpoint: false
   model_name: microscopy_vit_tiny

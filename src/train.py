@@ -50,6 +50,7 @@ from src.helper import (
     init_model,
     init_opt)
 from src.transforms import make_transforms
+from src.utils.visualization import log_umap_to_wandb  # Import the new visualization module
 
 # --
 log_timings = True
@@ -84,6 +85,7 @@ def main(args, resume_preempt=False):
     wandb_project = args['meta'].get('wandb_project', 'ijepa')
     wandb_entity = args['meta'].get('wandb_entity', None)
     wandb_run_name = args['meta'].get('wandb_run_name', None)
+    umap_epochs = args['meta']['umap_epochs']
     if not torch.cuda.is_available():
         device = torch.device('cpu')
     else:
@@ -435,12 +437,33 @@ def main(args, resume_preempt=False):
         logger.info('avg. loss %.3f' % loss_meter.avg)
         save_checkpoint(epoch+1)
         
-        # Log epoch-level metrics to wandb
+        # -- Create UMAP visualization at the end of each epoch
         if use_wandb and rank == 0:
+            # Log epoch-level metrics to wandb
             log_metrics({
                 'epoch_loss': loss_meter.avg,
                 'epoch': epoch + 1,
             })
+            
+            # Create UMAP visualization
+            umap_save_dir = os.path.join(folder, 'umap_plots')
+
+            if epoch % umap_epochs == 0:
+                try:
+                    # Create UMAP visualization with the target_encoder
+                    logger.info(f"Creating UMAP visualization for epoch {epoch+1}")
+                    log_umap_to_wandb(
+                        encoder=target_encoder,  # Use target_encoder for better stability
+                        dataloader=unsupervised_loader,
+                        dataset=unsupervised_loader.dataset,
+                        device=device,
+                        epoch=epoch+1,
+                        max_samples=1000,  # Limit to 1000 samples for speed
+                        save_dir=umap_save_dir
+                    )
+                    logger.info(f"UMAP visualization created and logged to W&B")
+                except Exception as e:
+                    logger.error(f"Error creating UMAP visualization: {str(e)}")
     
     # Finish wandb run
     if use_wandb and rank == 0:
