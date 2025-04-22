@@ -18,7 +18,8 @@ def make_transforms(
     crop_size=50,  # Changed to match your image size
     crop_scale=(0.3, 1.0),
     horizontal_flip=False,
-    normalization=None  # Will be loaded from dataset_stats.json
+    normalization=None,  # Will be loaded from dataset_stats.json
+    input_is_tensor=False
 ):
     """
     Create transforms for microscopy dataset.
@@ -28,6 +29,7 @@ def make_transforms(
         crop_scale (tuple): Scale range for random resized crop
         horizontal_flip (bool): Whether to apply random horizontal flip
         normalization (tuple): Tuple of (mean, std) for each channel
+        input_is_tensor (bool): Whether the input data is already a tensor
     """
     logger.info('making microscopy data transforms')
 
@@ -44,8 +46,10 @@ def make_transforms(
     if horizontal_flip:
         transform_list += [transforms.RandomHorizontalFlip()]
     
-    # Convert to tensor and normalize
-    transform_list += [transforms.ToTensor()]
+    # Convert to tensor and normalize - only if input is not already a tensor
+    if not input_is_tensor:
+        transform_list += [transforms.ToTensor()]
+        
     if normalization is not None:
         transform_list += [transforms.Normalize(normalization[0], normalization[1])]
 

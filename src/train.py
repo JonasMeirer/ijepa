@@ -137,7 +137,7 @@ def main(args, resume_preempt=False):
         pass
 
     # -- init torch distributed backend
-    use_distributed = True
+    use_distributed = False
     try:
         world_size, rank = init_distributed()
         logger.info(f'Initialized (rank/world-size) {rank}/{world_size}')
@@ -190,7 +190,8 @@ def main(args, resume_preempt=False):
     transform = make_transforms(
         crop_size=crop_size,
         crop_scale=crop_scale,
-        horizontal_flip=use_horizontal_flip)
+        horizontal_flip=use_horizontal_flip,
+        input_is_tensor=True)
 
     # -- init data-loaders/samplers
     _, unsupervised_loader, unsupervised_sampler = make_microscopy_dataset(
@@ -296,6 +297,7 @@ def main(args, resume_preempt=False):
             maskA_meter.update(len(masks_enc[0][0]))
             maskB_meter.update(len(masks_pred[0][0]))
 
+
             def train_step():
                 _new_lr = scheduler.step()
                 _new_wd = wd_scheduler.step()
@@ -346,6 +348,7 @@ def main(args, resume_preempt=False):
                         param_k.data.mul_(m).add_((1.-m) * param_q.detach().data)
 
                 return (float(loss), _new_lr, _new_wd, grad_stats)
+            
             (loss, _new_lr, _new_wd, grad_stats), etime = gpu_timer(train_step)
             loss_meter.update(loss)
             time_meter.update(etime)

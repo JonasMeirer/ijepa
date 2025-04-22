@@ -26,7 +26,8 @@ class MicroscopyDataset(Dataset):
         self.stds = torch.tensor(stats['stds'])
         
         # Get class information
-        self.classes = [file for file in sorted(os.listdir(root_dir)) if file.endswith('.tiff')]
+        self.classes = [dir for dir in sorted(os.listdir(root_dir)) if os.path.isdir(os.path.join(root_dir, dir))]
+        print(f"Found {len(self.classes)} classes")
         self.class_to_idx = {cls: idx for idx, cls in enumerate(self.classes)}
         
         # Collect all samples
@@ -39,6 +40,7 @@ class MicroscopyDataset(Dataset):
                         os.path.join(class_dir, img_name),
                         self.class_to_idx[class_name]
                     ))
+        print(f"Found {len(self.samples)} samples")
     
     def __len__(self):
         return len(self.samples)
@@ -63,6 +65,8 @@ class MicroscopyDataset(Dataset):
         image = image.permute(2, 0, 1)
         
         if self.transform:
+            # Apply transform directly to the tensor
+            # Our transform is configured to handle tensor input
             image = self.transform(image)
             
         return image, target
