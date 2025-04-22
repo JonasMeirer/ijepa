@@ -25,7 +25,6 @@ class MicroscopyDataset(Dataset):
         self.means = torch.tensor(stats['means'])
         self.stds = torch.tensor(stats['stds'])
         
-        import code; code.interact(local=dict(globals(), **locals()))
         # Get class information
         self.classes = [file for file in sorted(os.listdir(root_dir)) if file.endswith('.tiff')]
         self.class_to_idx = {cls: idx for idx, cls in enumerate(self.classes)}

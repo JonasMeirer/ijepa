@@ -222,9 +222,13 @@ def main(args, resume_preempt=False):
     
     # Wrap with DDP if distributed training is available
     if use_distributed:
-        encoder = DistributedDataParallel(encoder, static_graph=True)
-        predictor = DistributedDataParallel(predictor, static_graph=True)
-        target_encoder = DistributedDataParallel(target_encoder)
+        try:
+            encoder = DistributedDataParallel(encoder, static_graph=True)
+            predictor = DistributedDataParallel(predictor, static_graph=True)
+            target_encoder = DistributedDataParallel(target_encoder)
+        except Exception as e:
+            logger.info(f"Failed to initialize DDP: {str(e)}. Falling back to non-distributed mode.")
+            use_distributed = False
     
     for p in target_encoder.parameters():
         p.requires_grad = False
