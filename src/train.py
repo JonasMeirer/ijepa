@@ -43,6 +43,7 @@ from src.utils.custom_logging import (
     AverageMeter)
 from src.utils.tensors import repeat_interleave_batch
 from src.datasets.microscopy import make_microscopy_dataset
+from src.utils.wandb_logger import init_wandb, log_metrics, log_model, finish_run
 
 from src.helper import (
     load_checkpoint,
@@ -79,6 +80,10 @@ def main(args, resume_preempt=False):
     copy_data = args['meta']['copy_data']
     pred_depth = args['meta']['pred_depth']
     pred_emb_dim = args['meta']['pred_emb_dim']
+    use_wandb = args['meta'].get('use_wandb', False)
+    wandb_project = args['meta'].get('wandb_project', 'ijepa')
+    wandb_entity = args['meta'].get('wandb_entity', None)
+    wandb_run_name = args['meta'].get('wandb_run_name', None)
     if not torch.cuda.is_available():
         device = torch.device('cpu')
     else:
@@ -108,7 +113,7 @@ def main(args, resume_preempt=False):
     enc_mask_scale = args['mask']['enc_mask_scale']  # scale of context blocks
     num_pred_masks = args['mask']['num_pred_masks']  # number of target blocks
     pred_mask_scale = args['mask']['pred_mask_scale']  # scale of target blocks
-    aspect_ratio = args['mask']['aspect_ratio']  # aspect ratio of target blocks
+    aspect_ratio = args['mask']['aspect_ratio']
     # --
 
     # -- OPTIMIZATION
@@ -164,6 +169,18 @@ def main(args, resume_preempt=False):
                            ('%.5f', 'mask-A'),
                            ('%.5f', 'mask-B'),
                            ('%d', 'time (ms)'))
+
+    # -- Initialize wandb (only on rank 0)
+    if use_wandb and rank == 0:
+        # Determine if this is a resumed run
+        resume_wandb = load_model
+        init_wandb(
+            project_name=wandb_project,
+            config=args,
+            run_name=wandb_run_name,
+            entity=wandb_entity,
+            resume=resume_wandb
+        )
 
     # -- init model
     encoder, predictor = init_model(
@@ -271,7 +288,11 @@ def main(args, resume_preempt=False):
         if rank == 0:
             torch.save(save_dict, latest_path)
             if (epoch + 1) % checkpoint_freq == 0:
-                torch.save(save_dict, save_path.format(epoch=f'{epoch + 1}'))
+                checkpoint_path = save_path.format(epoch=f'{epoch + 1}')
+                torch.save(save_dict, checkpoint_path)
+                # Log model checkpoint to wandb
+                if use_wandb:
+                    log_model(checkpoint_path, aliases=[f"epoch_{epoch+1}"])
 
     # -- TRAINING LOOP
     for epoch in range(start_epoch, num_epochs):
@@ -356,6 +377,33 @@ def main(args, resume_preempt=False):
             # -- Logging
             def log_stats():
                 csv_logger.log(epoch + 1, itr, loss, maskA_meter.val, maskB_meter.val, etime)
+                
+                # Log to wandb (only on rank 0)
+                if use_wandb and rank == 0 and (itr % log_freq == 0):
+                    metrics = {
+                        'loss': loss,
+                        'loss_avg': loss_meter.avg,
+                        'mask_A': maskA_meter.avg,
+                        'mask_B': maskB_meter.avg,
+                        'lr': _new_lr,
+                        'weight_decay': _new_wd,
+                        'time_ms': time_meter.avg,
+                        'epoch': epoch + 1,
+                        'iteration': itr,
+                        'gpu_memory_gb': torch.cuda.max_memory_allocated() / 1024.**3,
+                    }
+                    
+                    # Add gradient stats if available
+                    if grad_stats is not None:
+                        metrics.update({
+                            'grad_first_layer': grad_stats.first_layer,
+                            'grad_last_layer': grad_stats.last_layer,
+                            'grad_min': grad_stats.min,
+                            'grad_max': grad_stats.max,
+                        })
+                    
+                    log_metrics(metrics, step=epoch * ipe + itr)
+                
                 if (itr % log_freq == 0) or np.isnan(loss) or np.isinf(loss):
                     logger.info('[%d, %5d] loss: %.3f '
                                 'masks: %.1f %.1f '
@@ -386,6 +434,17 @@ def main(args, resume_preempt=False):
         # -- Save Checkpoint after every epoch
         logger.info('avg. loss %.3f' % loss_meter.avg)
         save_checkpoint(epoch+1)
+        
+        # Log epoch-level metrics to wandb
+        if use_wandb and rank == 0:
+            log_metrics({
+                'epoch_loss': loss_meter.avg,
+                'epoch': epoch + 1,
+            })
+    
+    # Finish wandb run
+    if use_wandb and rank == 0:
+        finish_run()
 
 
 if __name__ == "__main__":

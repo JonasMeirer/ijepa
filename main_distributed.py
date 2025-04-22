@@ -43,33 +43,41 @@ parser.add_argument(
 parser.add_argument(
     '--time', type=int, default=4300,
     help='time in minutes to run job')
+parser.add_argument(
+    '--use-wandb', action='store_true',
+    help='whether to use Weights & Biases for logging')
+parser.add_argument(
+    '--wandb-project', type=str, default='ijepa',
+    help='Weights & Biases project name')
+parser.add_argument(
+    '--wandb-entity', type=str, default=None,
+    help='Weights & Biases entity (username or team name)')
+parser.add_argument(
+    '--wandb-run-name', type=str, default=None,
+    help='Name for this run in Weights & Biases')
 
 
 class Trainer:
 
-    def __init__(self, fname='configs.yaml', load_model=None):
-        self.fname = fname
-        self.load_model = load_model
+    def __init__(self, config_fname):
+        self.config_fname = config_fname
 
     def __call__(self):
-        fname = self.fname
-        load_model = self.load_model
-        logger.info(f'called-params {fname}')
-
-        # -- load script params
-        params = None
-        with open(fname, 'r') as y_file:
-            params = yaml.load(y_file, Loader=yaml.FullLoader)
-            logger.info('loaded params...')
-            pp = pprint.PrettyPrinter(indent=4)
-            pp.pprint(params)
-
-        resume_preempt = False if load_model is None else load_model
-        app_main(args=params, resume_preempt=resume_preempt)
-
-    def checkpoint(self):
-        fb_trainer = Trainer(self.fname, True)
-        return submitit.helpers.DelayedSubmission(fb_trainer,)
+        # -- load config file
+        config = None
+        with open(self.config_fname, 'r') as f:
+            config = yaml.load(f, Loader=yaml.FullLoader)
+        # -- update with Weights & Biases settings if specified
+        if args.use_wandb:
+            if 'meta' not in config:
+                config['meta'] = {}
+            config['meta']['use_wandb'] = True
+            config['meta']['wandb_project'] = args.wandb_project
+            config['meta']['wandb_entity'] = args.wandb_entity
+            config['meta']['wandb_run_name'] = args.wandb_run_name
+        # -- run real training
+        app_main(args=config)
+        return None
 
 
 def launch():

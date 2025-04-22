@@ -17,11 +17,11 @@ The predictor in I-JEPA can be seen as a primitive (and restricted) world-model 
 This world model is semantic in the sense that it predicts high level information about unseen regions in the image, rather than pixel-level details.
 
 We trained a stochastic decoder that maps the I-JEPA predicted representations back in pixel space as sketches.
-The model correctly captures positional uncertainty and produces high-level object parts with the correct pose (e.g., dog’s head, wolf’s front legs).
+The model correctly captures positional uncertainty and produces high-level object parts with the correct pose (e.g., dog's head, wolf's front legs).
 
 ![ijepa-predictor-sketch](https://github.com/facebookresearch/ijepa/assets/7530871/9b66e461-fc8b-4b12-9f06-63ec4dfc1452)
 <sub>
-Caption: Illustrating how the predictor learns to model the semantics of the world. For each image, the portion outside of the blue box is encoded and given to the predictor as context. The predictor outputs a representation for what it expects to be in the region within the blue box. To visualize the prediction, we train a generative model that produces a sketch of the contents represented by the predictor output, and we show a sample output within the blue box. The predictor recognizes the semantics of what parts should be filled in (the top of the dog’s head, the bird’s leg, the wolf’s legs, the other side of the building).
+Caption: Illustrating how the predictor learns to model the semantics of the world. For each image, the portion outside of the blue box is encoded and given to the predictor as context. The predictor outputs a representation for what it expects to be in the region within the blue box. To visualize the prediction, we train a generative model that produces a sketch of the contents represented by the predictor output, and we show a sample output within the blue box. The predictor recognizes the semantics of what parts should be filled in (the top of the dog's head, the bird's leg, the wolf's legs, the other side of the building).
 </sub>
 
 ## Evaluations
@@ -131,6 +131,72 @@ python main_distributed.py \
   --nodes 2 --tasks-per-node 8 \
   --time 1000
 ```
+
+## Training with Weights & Biases
+
+This repository supports integration with [Weights & Biases](https://wandb.ai/) for experiment tracking. 
+
+### Setup
+
+1. Install the requirements, which include Weights & Biases:
+```
+pip install -r requirements.txt
+```
+
+2. Log in to your Weights & Biases account:
+```
+wandb login
+```
+
+### Using Weights & Biases
+
+You can enable Weights & Biases logging in two ways:
+
+#### 1. Via Configuration File
+
+Add the following to your YAML configuration file:
+
+```yaml
+meta:
+  use_wandb: true
+  wandb_project: "ijepa"  # Your project name
+  wandb_entity: null      # Your username or team name (optional)
+  wandb_run_name: null    # Custom run name (optional)
+```
+
+Then run the training as usual:
+
+```bash
+python main.py --fname configs/your_config.yaml --devices cuda:0
+```
+
+#### 2. Using the dedicated script
+
+Use the provided `run_with_wandb.py` script:
+
+```bash
+python run_with_wandb.py \
+  --config configs/your_config.yaml \
+  --devices cuda:0 \
+  --wandb_project "your-project" \
+  --wandb_entity "your-username" \
+  --wandb_run_name "experiment-name"
+```
+
+### What gets logged
+
+The integration automatically logs:
+
+- Training metrics: loss, learning rate, weight decay
+- Mask information: number of patches in context and target masks
+- Gradient statistics
+- Memory usage
+- Model checkpoints
+- Full configuration parameters
+
+### Distributed Training
+
+When running with multiple GPUs, only rank 0 (the main process) will log to Weights & Biases to avoid duplicate logging.
 
 ---
 

@@ -31,6 +31,10 @@ mask:
   - 0.15
   - 0.2
 meta:
+  use_wandb: true
+  wandb_project: "ijepa"  # Project name
+  wandb_entity: "username"  # Username or team name (optional)
+  wandb_run_name: "experiment-name"  # Run name (optional)
   copy_data: false
   load_checkpoint: false
   model_name: microscopy_vit_tiny
@@ -38,6 +42,10 @@ meta:
   pred_emb_dim: 192
   read_checkpoint: null
   use_bfloat16: true
+  use_wandb: true
+  wandb_project: "ijepa"
+  wandb_entity: null  # Update with your username or team name
+  wandb_run_name: null  # If null, a name will be auto-generated
 optimization:
   ema:
   - 0.996
